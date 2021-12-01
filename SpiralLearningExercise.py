@@ -19,25 +19,35 @@ def generate_data(points_per_class=100, dim=2, num_classes=4, spiral_angle_span=
     return X, y
 
 
-def Loss_function(true_classification, scores, weights, lambda_regularization, margin,
-                  loss_type='SVM', regularization_penalty='L2'):
+def Loss_function(true_classification, scores, weights, lambda_regularization, loss_type='SVM',
+                  regularization_penalty='L2'):
     N = len(true_classification)
     if loss_type == 'SVM':
-        L = 1 / N * (np.sum(np.maximum(0, (scores.T - scores[range(N), true_classification]).T + margin))) - margin
+        margin = (scores.T - scores[range(N), true_classification]).T + 1
+        L = 1 / N * (np.sum(np.maximum(0, margin))) - 1
         # in CS231n they use sum over j ~= true_classification, which is equivalent tp subtracting the margin once
         # for margin>0
+        indicator = np.zeros(margin.shape)
+        indicator[margin > 0] = 1
+        dscores = np.copy(indicator)
+        dscores[range(N), true_classification] = 1 - np.sum(indicator, 1)
+        dscores /= N
     elif loss_type == 'Softmax':
         exp_scores = np.exp((scores.T - np.max(scores, 1)).T)
         probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
         L = 1 / N * np.sum(-np.log(probs[range(N), true_classification]))
+        dscores = probs
+        dscores[range(N), true_classification] -= 1
+        dscores /= N
     else:
         raise NotImplementedError
 
     if regularization_penalty == 'L2':
         L += 1 / 2 * lambda_regularization * np.sum(weights ** 2)
+        dW_regularization = lambda_regularization * weights
     else:
         raise NotImplementedError
-    return L
+    return L, dscores, dW_regularization
 
 
 if __name__ == "__main__":
