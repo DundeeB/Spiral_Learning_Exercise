@@ -23,18 +23,13 @@ def Loss_function(true_classification, scores, weights, lambda_regularization, m
                   loss_type='SVM', regularization_penalty='L2'):
     N = len(true_classification)
     if loss_type == 'SVM':
-        scores_at_true_classification = np.array([scores[i, j] for i, j in enumerate(true_classification)])
-        L = 1 / N * (np.sum(np.maximum(0, (scores.T - scores_at_true_classification).T + margin)))
-        if margin > 0:
-            L -= margin
-            # in CS231n they use sum over j ~= true_classification, which is equivalent tp subtracting the margin once
-            # for margin>0
+        L = 1 / N * (np.sum(np.maximum(0, (scores.T - scores[range(N), true_classification]).T + margin))) - margin
+        # in CS231n they use sum over j ~= true_classification, which is equivalent tp subtracting the margin once
+        # for margin>0
     elif loss_type == 'Softmax':
-        L = 0
-        for i, j in enumerate(true_classification):
-            f = scores[i] - np.max(scores[i])
-            L += -np.log(np.exp(f[j]) / np.sum(np.exp(f)))
-        L /= N
+        exp_scores = np.exp((scores.T - np.max(scores, 1)).T)
+        probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+        L = 1 / N * np.sum(-np.log(probs[range(N), true_classification]))
     else:
         raise NotImplementedError
 
