@@ -14,6 +14,7 @@ def generate_data(points_per_class=100, dim=2, num_classes=3, spiral_angle_span=
         X[ix] = np.c_[r * np.sin(t), r * np.cos(t)]
         y[ix] = j
     if plot:
+        plt.figure()
         plt.scatter(X[:, 0], X[:, 1], c=y, s=40)  # , cmap=plt.cm.Spectral)
         plt.title('2D Spiral classification challenge')
     return X, y
@@ -68,6 +69,7 @@ def train(iterations, X, y, lambda_regularization, dim, num_classes, classificat
             W += -grad_step * dW
             b += -grad_step * db
             losses.append(L)
+        return losses, W, b
     elif classification_type == '3LayerNeuralNetwork':
         W1 = 0.01 * np.random.randn(dim, hidden_layer_size)
         b1 = np.zeros((1, hidden_layer_size))
@@ -100,18 +102,26 @@ def train(iterations, X, y, lambda_regularization, dim, num_classes, classificat
             if i % test_over_fit == 0:
                 predicted_class = np.argmax(scores, axis=1)
                 accuracy = np.mean(predicted_class == y)
-                print('Linear classifier training accuracy: %.3f' % (accuracy))
+                print('Classifier training accuracy: %.3f' % (accuracy))
                 if accuracy == 1:
                     print('reached perfect accuracy')
                     break
+        return losses, W1, b1, W2, b2, W3, b3
     else:
         raise NotImplementedError
-    plt.figure()
-    plt.plot(losses, '.', label=classification_type + ' classifier with SVM loss')
-    plt.xlabel('iterations')
-    plt.ylabel('loss')
-    plt.grid()
-    return
+
+
+def plot_decision_boundaries(X, predict_func, resolution=0.01):
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, resolution), np.arange(y_min, y_max, resolution))
+
+    plt.figure(figsize=(10, 8))
+
+    Z = predict_func(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, alpha=0.4)
+    plt.scatter(X[:, 0], X[:, 1], c=y, s=20, edgecolor='k')
 
 
 if __name__ == "__main__":
@@ -128,11 +138,28 @@ if __name__ == "__main__":
                          'axes.titlesize': size,
                          'xtick.labelsize': size * 0.75, 'ytick.labelsize': size * 0.75})
 
-    X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=2*np.pi)
+    X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=2 * np.pi, plot=False)
+    losses_linear, W, b = train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear')
+    plot_decision_boundaries(X, lambda X: np.argmax(np.dot(X, W) + b, axis=1))
 
-    # train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear')
-    train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='3LayerNeuralNetwork',
-          hidden_layer_size=100)
+    X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=2 * np.pi, plot=False)
+    losses_neural, W1, b1, W2, b2, W3, b3 = train(iterations, X, y, lambda_regularization, dim, num_classes,
+                                                  classification_type='3LayerNeuralNetwork', hidden_layer_size=100)
 
+
+    def predict(X):
+        first_layer = np.maximum(0, np.dot(X, W1) + b1)
+        second_layer = np.maximum(0, np.dot(first_layer, W2) + b2)
+        scores = np.dot(second_layer, W3) + b3
+        return np.argmax(scores, axis=1)
+
+
+    plot_decision_boundaries(X, lambda X: predict(X))
+    plt.figure()
+    for losses in [losses_linear, losses_neural]:
+        plt.plot(losses, '.')
+    plt.xlabel('iterations')
+    plt.ylabel('loss')
+    plt.grid()
     plt.legend()
     plt.show()
