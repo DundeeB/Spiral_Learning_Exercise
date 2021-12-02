@@ -44,64 +44,82 @@ def Loss_function(true_classification, scores, weights, lambda_regularization, l
         raise NotImplementedError
 
     if regularization_penalty == 'L2':
-        L += 1 / 2 * lambda_regularization * np.sum(weights ** 2)
-        dW_regularization = lambda_regularization * weights
+        dW_regularization = []
+        for W in weights:
+            L += 1 / 2 * lambda_regularization * np.sum(W ** 2)
+            dW_regularization.append(lambda_regularization * W)
     else:
         raise NotImplementedError
     return L, dscores, dW_regularization
 
 
-def Linear_classifier(X, W, b):
-    return np.dot(X, W) + b
-
-
-def Linear_classifier_backpropagation(X, W, b, dscores):
-    dW = np.dot(X.T, dscores)
-    db = np.sum(dscores, axis=0, keepdims=True)
-    return dW, db
-
-
-def initialize_linear_W(dim, num_classes):
-    W = 0.01 * np.random.randn(dim, num_classes)
-    b = np.zeros((1, num_classes))
-    return W, b
-
-
-def train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear'):
+def train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear',
+          hidden_layer_size=None, test_over_fit=100):
+    losses = []
     if classification_type == 'Linear':
-        W, b = initialize_linear_W(dim, num_classes)
+        W = 0.01 * np.random.randn(dim, num_classes)
+        b = np.zeros((1, num_classes))
+        for i in range(iterations):
+            scores = np.dot(X, W) + b
+            L, dscores, dW_regularization = Loss_function(y, scores, [W], lambda_regularization)
+            dW = np.dot(X.T, dscores)
+            db = np.sum(dscores, axis=0, keepdims=True)
+            dW += dW_regularization[0]
+            W += -grad_step * dW
+            b += -grad_step * db
+            losses.append(L)
+    elif classification_type == '3LayerNeuralNetwork':
+        W1 = 0.01 * np.random.randn(dim, hidden_layer_size)
+        b1 = np.zeros((1, hidden_layer_size))
+        W2 = 0.01 * np.random.randn(hidden_layer_size, hidden_layer_size)
+        b2 = np.zeros((1, hidden_layer_size))
+        W3 = 0.01 * np.random.randn(hidden_layer_size, num_classes)
+        b3 = np.zeros((1, num_classes))
+        for i in range(iterations):
+            first_layer = np.maximum(0, np.dot(X, W1) + b1)
+            second_layer = np.maximum(0, np.dot(first_layer, W2) + b2)
+            scores = np.dot(second_layer, W3) + b3
+            L, dscores, dW_regularization = Loss_function(y, scores, [W1, W2, W3], lambda_regularization)
+            dW3 = np.dot(second_layer.T, dscores) + dW_regularization[2]
+            db3 = np.sum(dscores, axis=0, keepdims=True)
+            dsecond_layer = np.dot(dscores, W3.T)
+            dsecond_layer[second_layer <= 0] = 0
+            dW2 = np.dot(first_layer.T, dsecond_layer) + dW_regularization[1]
+            db2 = np.sum(dsecond_layer, axis=0, keepdims=True)
+            dfirst_layer = np.dot(dsecond_layer, W2.T)
+            dfirst_layer[first_layer <= 0] = 0
+            dW1 = np.dot(X.T, dfirst_layer) + dW_regularization[0]
+            db1 = np.sum(dfirst_layer, axis=0, keepdims=True)
+            W1 += -grad_step * dW1
+            b1 += -grad_step * db1
+            W2 += -grad_step * dW2
+            b2 += -grad_step * db2
+            W3 += -grad_step * dW3
+            b3 += -grad_step * db3
+            losses.append(L)
+            if i % test_over_fit == 0:
+                predicted_class = np.argmax(scores, axis=1)
+                accuracy = np.mean(predicted_class == y)
+                print('Linear classifier training accuracy: %.3f' % (accuracy))
+                if accuracy == 1:
+                    print('reached perfect accuracy')
+                    break
     else:
         raise NotImplementedError
-    losses = []
-    for i in range(iterations):
-        if classification_type == 'Linear':
-            scores = Linear_classifier(X, W, b)
-        else:
-            raise NotImplementedError
-        L, dscores, dW_regularization = Loss_function(y, scores, W, lambda_regularization)
-        losses.append(L)
-        if classification_type == 'Linear':
-            dW, db = Linear_classifier_backpropagation(X, W, b, dscores)
-        else:
-            raise NotImplementedError
-        dW += dW_regularization
-        W += -grad_step * dW
-        b += -grad_step * db
     plt.figure()
     plt.plot(losses, '.', label=classification_type + ' classifier with SVM loss')
     plt.xlabel('iterations')
     plt.ylabel('loss')
     plt.grid()
-    predicted_class = np.argmax(scores, axis=1)
-    print('Linear classifier training accuracy: %.2f' % (np.mean(predicted_class == y)))
+    return
 
 
 if __name__ == "__main__":
     """
     Exercise follows stanford course CS231n: https://cs231n.github.io/neural-networks-case-study/
     """
-    dim, num_classes = 2, 3
-    iterations = 100
+    dim, num_classes = 2, 7
+    iterations = int(2e3)
     grad_step = 0.2
     lambda_regularization = 1e-3
 
@@ -110,9 +128,11 @@ if __name__ == "__main__":
                          'axes.titlesize': size,
                          'xtick.labelsize': size * 0.75, 'ytick.labelsize': size * 0.75})
 
-    X, y = generate_data(dim=dim, num_classes=num_classes)
+    X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=2*np.pi)
 
-    train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear')
+    # train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear')
+    train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='3LayerNeuralNetwork',
+          hidden_layer_size=100)
 
     plt.legend()
     plt.show()
