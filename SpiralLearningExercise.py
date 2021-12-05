@@ -61,7 +61,7 @@ def train(iterations, X, y, lambda_regularization, dim, num_classes, num_layers=
     for i in range(num_layers):
         input_dim = dim if i == 0 else hidden_layer_size
         output_dim = hidden_layer_size if i < num_layers - 1 else num_classes
-        weights.append(0.01 * np.random.randn(input_dim, output_dim))
+        weights.append(np.sqrt(2.0 / input_dim) * np.random.randn(input_dim, output_dim))
         biases.append(np.zeros((1, output_dim)))
     losses = []
     for iteration in range(iterations):
@@ -127,7 +127,7 @@ if __name__ == "__main__":
                          'xtick.labelsize': size * 0.75, 'ytick.labelsize': size * 0.75})
 
     span_angle = 4 * np.pi
-    for num_layers in range(1, 5):
+    for num_layers in range(1, 7):
         if num_layers == 1:
             # dof = D*K --> h can be anything
             hidden_layer_size = None
@@ -162,3 +162,7 @@ if __name__ == "__main__":
     plt.grid()
     plt.legend()
     plt.show()
+# Possible future excercizes:
+# TODO: input data division to batches
+# TODO: centering and normalizing?
+# TODO: try batch normalization?
