@@ -54,61 +54,48 @@ def Loss_function(true_classification, scores, weights, lambda_regularization, l
     return L, dscores, dW_regularization
 
 
-def train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear',
-          hidden_layer_size=None, test_over_fit=100):
+def train(iterations, X, y, lambda_regularization, dim, num_classes, num_layers=1, hidden_layer_size=None,
+          test_over_fit=100):
+    weights = []
+    biases = []
+    for i in range(num_layers):
+        input_dim = dim if i == 0 else hidden_layer_size
+        output_dim = hidden_layer_size if i < num_layers - 1 else num_classes
+        weights.append(0.01 * np.random.randn(input_dim, output_dim))
+        biases.append(np.zeros((1, output_dim)))
     losses = []
-    if classification_type == 'Linear':
-        W = 0.01 * np.random.randn(dim, num_classes)
-        b = np.zeros((1, num_classes))
-        for i in range(iterations):
-            scores = np.dot(X, W) + b
-            L, dscores, dW_regularization = Loss_function(y, scores, [W], lambda_regularization)
-            dW = np.dot(X.T, dscores)
-            db = np.sum(dscores, axis=0, keepdims=True)
-            dW += dW_regularization[0]
-            W += -grad_step * dW
-            b += -grad_step * db
-            losses.append(L)
-        return losses, W, b
-    elif classification_type == '3LayerNeuralNetwork':
-        W1 = 0.01 * np.random.randn(dim, hidden_layer_size)
-        b1 = np.zeros((1, hidden_layer_size))
-        W2 = 0.01 * np.random.randn(hidden_layer_size, hidden_layer_size)
-        b2 = np.zeros((1, hidden_layer_size))
-        W3 = 0.01 * np.random.randn(hidden_layer_size, num_classes)
-        b3 = np.zeros((1, num_classes))
-        for i in range(iterations):
-            first_layer = np.maximum(0, np.dot(X, W1) + b1)
-            second_layer = np.maximum(0, np.dot(first_layer, W2) + b2)
-            scores = np.dot(second_layer, W3) + b3
-            L, dscores, dW_regularization = Loss_function(y, scores, [W1, W2, W3], lambda_regularization)
-            dW3 = np.dot(second_layer.T, dscores) + dW_regularization[2]
-            db3 = np.sum(dscores, axis=0, keepdims=True)
-            dsecond_layer = np.dot(dscores, W3.T)
-            dsecond_layer[second_layer <= 0] = 0
-            dW2 = np.dot(first_layer.T, dsecond_layer) + dW_regularization[1]
-            db2 = np.sum(dsecond_layer, axis=0, keepdims=True)
-            dfirst_layer = np.dot(dsecond_layer, W2.T)
-            dfirst_layer[first_layer <= 0] = 0
-            dW1 = np.dot(X.T, dfirst_layer) + dW_regularization[0]
-            db1 = np.sum(dfirst_layer, axis=0, keepdims=True)
-            W1 += -grad_step * dW1
-            b1 += -grad_step * db1
-            W2 += -grad_step * dW2
-            b2 += -grad_step * db2
-            W3 += -grad_step * dW3
-            b3 += -grad_step * db3
-            losses.append(L)
-            if i % test_over_fit == 0:
-                predicted_class = np.argmax(scores, axis=1)
-                accuracy = np.mean(predicted_class == y)
-                print('Classifier training accuracy: %.3f' % (accuracy))
-                if accuracy == 1:
-                    print('reached perfect accuracy')
-                    break
-        return losses, W1, b1, W2, b2, W3, b3
-    else:
-        raise NotImplementedError
+    for iteration in range(iterations):
+        hidden_layers = []
+        current_layer = X
+        for i in range(num_layers - 1):
+            current_layer = np.maximum(0, np.dot(current_layer, weights[i]) + biases[i])
+            hidden_layers.append(current_layer)
+        scores = np.dot(current_layer, weights[-1]) + biases[-1]
+        L, dscores, dW_regularization = Loss_function(y, scores, weights, lambda_regularization)
+
+        dW, db = [], []
+        dcurrent_layer = dscores
+        for i in range(num_layers - 1):
+            db.append(np.sum(dcurrent_layer, axis=0, keepdims=True))
+            dW.append(np.dot(hidden_layers[-1 - i].T, dcurrent_layer) + dW_regularization[-1 - i])
+            dcurrent_layer = np.dot(dcurrent_layer, weights[-1 - i].T)
+            dcurrent_layer[hidden_layers[-1 - i] <= 0] = 0
+        db.append(np.sum(dcurrent_layer, axis=0, keepdims=True))
+        dW.append(np.dot(X.T, dcurrent_layer) + dW_regularization[0])
+        dW.reverse()
+        db.reverse()
+        for i in range(num_layers):
+            biases[i] = biases[i] - grad_step * db[i]
+            weights[i] = weights[i] - grad_step * dW[i]
+        losses.append(L)
+        if iteration % test_over_fit == 0:
+            predicted_class = np.argmax(scores, axis=1)
+            accuracy = np.mean(predicted_class == y)
+            print('Classifier training accuracy: %.3f' % (accuracy))
+            if accuracy == 1:
+                print('reached perfect accuracy')
+                break
+    return losses, weights, biases
 
 
 def plot_decision_boundaries(X, predict_func, resolution=0.01):
@@ -129,7 +116,7 @@ if __name__ == "__main__":
     Exercise follows stanford course CS231n: https://cs231n.github.io/neural-networks-case-study/
     """
     dim, num_classes = 2, 7
-    iterations = int(2e3)
+    iterations = int(1e4)
     grad_step = 0.2
     lambda_regularization = 1e-3
 
@@ -138,26 +125,26 @@ if __name__ == "__main__":
                          'axes.titlesize': size,
                          'xtick.labelsize': size * 0.75, 'ytick.labelsize': size * 0.75})
 
-    X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=2 * np.pi, plot=False)
-    losses_linear, W, b = train(iterations, X, y, lambda_regularization, dim, num_classes, classification_type='Linear')
-    plot_decision_boundaries(X, lambda X: np.argmax(np.dot(X, W) + b, axis=1))
-
-    X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=2 * np.pi, plot=False)
-    losses_neural, W1, b1, W2, b2, W3, b3 = train(iterations, X, y, lambda_regularization, dim, num_classes,
-                                                  classification_type='3LayerNeuralNetwork', hidden_layer_size=100)
-
-
-    def predict(X):
-        first_layer = np.maximum(0, np.dot(X, W1) + b1)
-        second_layer = np.maximum(0, np.dot(first_layer, W2) + b2)
-        scores = np.dot(second_layer, W3) + b3
-        return np.argmax(scores, axis=1)
+    span_angle = 4 * np.pi
+    for num_layers in [1, 2, 3]:
+        print('Training ' + str(num_layers) + ' layers')
+        X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=span_angle, plot=False)
+        losses, weights, biases = train(iterations, X, y, lambda_regularization, dim, num_classes,
+                                        num_layers=num_layers, hidden_layer_size=100)
 
 
-    plot_decision_boundaries(X, lambda X: predict(X))
-    plt.figure()
-    for losses in [losses_linear, losses_neural]:
-        plt.plot(losses, '.')
+        def predict(X):
+            current_layer = X
+            for i in range(num_layers - 1):
+                current_layer = np.maximum(0, np.dot(current_layer, weights[i]) + biases[i])
+            scores = np.dot(current_layer, weights[-1]) + biases[-1]
+            return np.argmax(scores, axis=1)
+
+
+        plot_decision_boundaries(X, lambda X: predict(X))
+        plt.title(str(num_layers) + ' layers')
+        plt.figure(10)
+        plt.plot(losses, '.', label=str(num_layers) + ' layers')
     plt.xlabel('iterations')
     plt.ylabel('loss')
     plt.grid()
