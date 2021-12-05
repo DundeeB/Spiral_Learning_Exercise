@@ -55,7 +55,7 @@ def Loss_function(true_classification, scores, weights, lambda_regularization, l
 
 
 def train(iterations, X, y, lambda_regularization, dim, num_classes, num_layers=1, hidden_layer_size=None,
-          test_over_fit=100):
+          test_over_fit=500):
     weights = []
     biases = []
     for i in range(num_layers):
@@ -117,8 +117,9 @@ if __name__ == "__main__":
     """
     dim, num_classes = 2, 7
     iterations = int(1e4)
-    grad_step = 0.2
+    grad_step = 0.3
     lambda_regularization = 1e-3
+    dof = 5e3  # d.o.f degrees of freedom
 
     size = 30
     plt.rcParams.update({'legend.fontsize': size * 0.75, 'figure.figsize': (12, 9), 'axes.labelsize': size,
@@ -126,11 +127,22 @@ if __name__ == "__main__":
                          'xtick.labelsize': size * 0.75, 'ytick.labelsize': size * 0.75})
 
     span_angle = 4 * np.pi
-    for num_layers in [1, 2, 3]:
-        print('Training ' + str(num_layers) + ' layers')
+    for num_layers in range(1, 5):
+        if num_layers == 1:
+            # dof = D*K --> h can be anything
+            hidden_layer_size = None
+        else:
+            # dof = D*h+h^2*(n-2)+h*K --> (n-2) h^2 + (D+K) h - dof = 0
+            a, b, c = num_layers - 2, dim + num_classes, -dof
+            if a == 0:
+                x = -c / b
+            else:
+                x = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+            hidden_layer_size = int(np.floor(x))
+        print('Training ' + str(num_layers) + ' layers, hidden layer size is ' + str(hidden_layer_size))
         X, y = generate_data(dim=dim, num_classes=num_classes, spiral_angle_span=span_angle, plot=False)
         losses, weights, biases = train(iterations, X, y, lambda_regularization, dim, num_classes,
-                                        num_layers=num_layers, hidden_layer_size=100)
+                                        num_layers=num_layers, hidden_layer_size=hidden_layer_size)
 
 
         def predict(X):
